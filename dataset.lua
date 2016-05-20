@@ -194,17 +194,17 @@ function dataset:__init(...)
    assert(maxPathLength > 0, "paths of files are length 0?")
    self.imagePath:resize(length, maxPathLength):fill(0)
    local s_data = self.imagePath:data()
+   self.numSamples = self.imagePath:size(1)
    local count = 0
    for line in io.lines(combinedFindList) do
       ffi.copy(s_data, line)
       s_data = s_data + maxPathLength
-      if self.verbose and count % 10000 == 0 then
+      if self.verbose and (count % math.floor(self.numSamples/100)) == 0 then
          xlua.progress(count, length)
       end;
       count = count + 1
    end
 
-   self.numSamples = self.imagePath:size(1)
    if self.verbose then print(self.numSamples ..  ' samples found.') end
    --==========================================================================
    print('Updating classList and imageClass appropriately')
