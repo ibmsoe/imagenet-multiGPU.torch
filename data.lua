@@ -13,6 +13,12 @@ Threads.serialization('threads.sharedserialize')
 -- This script contains the logic to create K threads for parallel data-loading.
 -- For the data-loading details, look at donkey.lua
 -------------------------------------------------------------------------------
+paths.dofile('donkey.lua')
+local mn = mean
+local std = std
+local train_l = trainLoader
+local test_l = testLoader
+
 do -- start K datathreads (donkeys)
    if opt.nDonkeys > 0 then
       local options = opt -- make an upvalue to serialize over to donkey threads
@@ -20,14 +26,19 @@ do -- start K datathreads (donkeys)
          opt.nDonkeys,
          function()
             require 'torch'
+            require 'image'
+            paths.dofile('dataset.lua')
          end,
          function(idx)
             opt = options -- pass to all donkeys via upvalue
             tid = idx
             local seed = opt.manualSeed + idx
             torch.manualSeed(seed)
+            local mean = mn
+            local std = std
+            _G.trainLoader = train_l
+            _G.testLoader = test_l            
             print(string.format('Starting donkey with id: %d seed: %d', tid, seed))
-            paths.dofile('donkey.lua')
          end
       );
    else -- single threaded data loading. useful for debugging
@@ -40,7 +51,7 @@ end
 
 nClasses = nil
 classes = nil
-donkeys:addjob(function() return trainLoader.classes end, function(c) classes = c end)
+donkeys:addjob(function() return _G.trainLoader.classes end, function(c) classes = c end)
 donkeys:synchronize()
 nClasses = #classes
 assert(nClasses, "Failed to get nClasses")
@@ -50,7 +61,7 @@ print('nClasses: ', nClasses)
 torch.save(paths.concat(opt.save, 'classes.t7'), classes)
 
 nTest = 0
-donkeys:addjob(function() return testLoader:size() end, function(c) nTest = c end)
+donkeys:addjob(function() return _G.testLoader:size() end, function(c) nTest = c end)
 donkeys:synchronize()
 assert(nTest > 0, "Failed to get nTest")
 print('nTest: ', nTest)

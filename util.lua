@@ -28,7 +28,7 @@ local function cleanDPT(module)
 end
 
 function saveDataParallel(filename, model)
-   if torch.type(model) == 'nn.DataParallelTable' then
+   if torch.type(model) == 'DataParallelTable' or torch.type(model) == 'nn.DataParallelTable' then
       torch.save(filename, cleanDPT(model))
    elseif torch.type(model) == 'nn.Sequential' then
       local temp_model = nn.Sequential()
@@ -50,7 +50,7 @@ function loadDataParallel(filename, nGPU)
       require 'cudnn'
    end
    local model = torch.load(filename)
-   if torch.type(model) == 'nn.DataParallelTable' then
+   if torch.type(model) == 'nn.DataParallelTable' or torch.type(model) == 'DataParallelTable' then
       return makeDataParallel(model:get(1):float(), nGPU)
    elseif torch.type(model) == 'nn.Sequential' then
       for i,module in ipairs(model.modules) do

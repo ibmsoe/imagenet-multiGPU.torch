@@ -7,6 +7,9 @@
 --  of patent rights can be found in the PATENTS file in the same directory.
 --
 require 'optim'
+local Threads = require 'threads'
+Threads.serialization('threads.sharedserialize')
+
 
 --[[
    1. Setup SGD optimization state and learning rate schedule
@@ -69,6 +72,14 @@ local top1_epoch, loss_epoch
 
 -- 3. train - this function handles the high-level training loop,
 --            i.e. load data, train model, save model and state to disk
+
+local batchSize_l = opt.batchSize
+local epochSize_l = opt.epochSize
+logger_thread = Threads(1,function() require 'cutorch' end, 
+                          function()
+        local batchSize_l = batchSize_l
+        local epochSize_l = epochSize_l
+ end)
 function train()
    print('==> doing epoch on training data:')
    print("==> online epoch # " .. epoch)
@@ -107,6 +118,7 @@ function train()
 
    donkeys:synchronize()
    cutorch.synchronize()
+   logger_thread:synchronize()
 
    top1_epoch = top1_epoch * 100 / (opt.batchSize * opt.epochSize)
    loss_epoch = loss_epoch / opt.epochSize
@@ -154,7 +166,9 @@ function trainBatch(inputsCPU, labelsCPU)
    local err, outputs
    feval = function(x)
       model:zeroGradParameters()
-      outputs = model:forward(inputs)
+      local outputs = model:forward(inputs)
+      logger_thread:synchronize()
+      logger_thread:addjob(function() output_l = outputs end)
       err = criterion:forward(outputs, labels)
       local gradOutputs = criterion:backward(outputs, labels)
       model:backward(inputs, gradOutputs)
@@ -165,22 +179,33 @@ function trainBatch(inputsCPU, labelsCPU)
    cutorch.synchronize()
    batchNumber = batchNumber + 1
    loss_epoch = loss_epoch + err
-   -- top-1 error
-   local top1 = 0
-   do
-      local _,prediction_sorted = outputs:float():sort(2, true) -- descending
-      for i=1,opt.batchSize do
-	 if prediction_sorted[i][1] == labelsCPU[i] then
-	    top1_epoch = top1_epoch + 1;
-	    top1 = top1 + 1
-	 end
-      end
-      top1 = top1 * 100 / opt.batchSize;
-   end
-   -- Calculate top-1 error, and print information
-   print(('Epoch: [%d][%d/%d]\tTime %.3f Err %.4f Top1-%%: %.2f LR %.0e DataLoadingTime %.3f'):format(
-          epoch, batchNumber, opt.epochSize, timer:time().real, err, top1,
-          optimState.learningRate, dataLoadingTime))
+   
+  local function sortLog(time_l,epoch_l,batchNumber_l,dataLoadingTime_l,err_l,lr_l)
+     local top1 = 0
+     local top1_r
+     do
+        local _,prediction_sorted = output_l:float():sort(2, true) -- descending
+        for i=1,batchSize_l do
+          if prediction_sorted[i][1] == labelsCPU[i] then
+           top1 = top1 + 1
+          end
+        end
+        top1_r = top1 * 100 / batchSize_l;
+     end
+     print(('Epoch: [%d][%d/%d]\tTime %.3f Err %.4f Top1-%%: %.2f LR %.0e DataLoadingTime %.3f'):format(
+            epoch_l, batchNumber_l, epochSize_l, time_l, err_l, top1_r, lr_l, dataLoadingTime_l))
 
-   dataTimer:reset()
+     return top1
+  end
+
+  local time_l = timer:time().real
+  local epoch_l = epoch
+  local batchNumber_l = batchNumber
+  local dataLoadingTime_l = dataLoadingTime;
+  local err_l = err
+  local lr_l = optimState.learningRate
+  logger_thread:addjob(function() return sortLog(time_l,epoch_l,batchNumber_l,dataLoadingTime_l,err_l,lr_l) end, 
+                       function(t) top1_epoch = top1_epoch + t end)
+   
+  dataTimer:reset()
 end

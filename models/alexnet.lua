@@ -1,3 +1,5 @@
+local dpt = require 'DataParallelTable'
+
 function createModel(nGPU)
    local features = nn.Concat(2)
    local fb1 = nn.Sequential() -- branch 1
@@ -22,8 +24,17 @@ function createModel(nGPU)
 
    features:add(fb1)
    features:add(fb2)
-   features:cuda()
-   features = makeDataParallel(features, nGPU) -- defined in util.lua
+   for indx,module in pairs(features:findModules('nn.SpatialConvolution')) do
+     module.weight:normal(0,math.sqrt(2/(module.kW*module.kH*module.nOutputPlane)))
+   end
+   
+     features:cuda()     
+     local gpu_table = torch.range(1, nGPU):totable()
+     local d = dpt(1,1,0,1) -- use threads by default
+     d.modules[1] = features
+     d.gpuAssignments = gpu_table
+     d.gradInput = nil
+     features = d:cuda()     
 
    -- 1.3. Create Classifier (fully connected layers)
    local classifier = nn.Sequential()

@@ -1,3 +1,7 @@
+-- optimised
+local dpt = require 'DataParallelTable'
+
+
 function createModel(nGPU)
    local modelType = 'A' -- on a titan black, B/D/E run out of memory even for batch-size 32
 
@@ -32,15 +36,27 @@ function createModel(nGPU)
    end
 
    features:cuda()
-   features = makeDataParallel(features, nGPU) -- defined in util.lua
+
+   local gpu_table = torch.range(1, nGPU):totable()
+   local d = dpt(1,1,0,1) -- use threads by default
+   d.modules[1] = features
+   d.gpuAssignments = gpu_table
+   d.gradInput = nil
+
+   features = d:cuda()
+
+
+
 
    local classifier = nn.Sequential()
    classifier:add(nn.View(512*7*7))
    classifier:add(nn.Linear(512*7*7, 4096))
    classifier:add(nn.Threshold(0, 1e-6))
+   classifier:add(nn.BatchNormalization(4096, 1e-3))
    classifier:add(nn.Dropout(0.5))
    classifier:add(nn.Linear(4096, 4096))
    classifier:add(nn.Threshold(0, 1e-6))
+   classifier:add(nn.BatchNormalization(4096, 1e-3))
    classifier:add(nn.Dropout(0.5))
    classifier:add(nn.Linear(4096, nClasses))
    classifier:add(nn.LogSoftMax())
@@ -48,8 +64,6 @@ function createModel(nGPU)
 
    local model = nn.Sequential()
    model:add(features):add(classifier)
-   model.imageSize = 256
-   model.imageCrop = 224
 
    return model
 end

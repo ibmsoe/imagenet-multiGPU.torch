@@ -20,7 +20,8 @@ local opts = paths.dofile('opts.lua')
 opt = opts.parse(arg)
 
 nClasses = opt.nClasses
-
+torch.manualSeed(opt.manualSeed)
+cutorch.manualSeedAll(opt.manualSeed)
 paths.dofile('util.lua')
 paths.dofile('model.lua')
 opt.imageSize = model.imageSize or opt.imageSize
@@ -29,7 +30,6 @@ opt.imageCrop = model.imageCrop or opt.imageCrop
 print(opt)
 
 cutorch.setDevice(opt.GPU) -- by default, use GPU 1
-torch.manualSeed(opt.manualSeed)
 
 print('Saving everything to: ' .. opt.save)
 os.execute('mkdir -p ' .. opt.save)
