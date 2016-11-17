@@ -75,6 +75,7 @@ local top1_epoch, loss_epoch
 
 local batchSize_l = opt.batchSize
 local epochSize_l = opt.epochSize
+local nClasses = opt.nClasses
 logger_thread = Threads(1,function() require 'cutorch' end, 
                           function()
         local batchSize_l = batchSize_l
@@ -186,7 +187,8 @@ function trainBatch(inputsCPU, labelsCPU)
      do
         local _,prediction_sorted = output_l:float():sort(2, true) -- descending
         for i=1,batchSize_l do
-          if prediction_sorted[i][1] == labelsCPU[i] then
+          inRangeLabel = ((prediction_sorted[i][1]-1) % nClasses) + 1
+          if inRangeLabel == labelsCPU[i] then
            top1 = top1 + 1
           end
         end
