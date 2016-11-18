@@ -106,7 +106,7 @@ function createModel(nGPU)
 
 
    local gpu_table = torch.range(1, nGPU):totable()
-   local d = dpt(1,1,0,1) -- use threads by default
+   local d = dpt(1,1,false,1) -- use threads by default
    d.modules[1] = model
    d.gpuAssignments = gpu_table
    d.gradInput = nil
