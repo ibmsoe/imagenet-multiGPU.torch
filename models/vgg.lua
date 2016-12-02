@@ -1,5 +1,4 @@
 -- optimised
-local dpt = require 'DataParallelTable'
 
 
 function createModel(nGPU)
@@ -36,14 +35,13 @@ function createModel(nGPU)
    end
 
    features:cuda()
-
    local gpu_table = torch.range(1, nGPU):totable()
-   local d = dpt(1,1,false,1) -- use threads by default
-   d.modules[1] = features
-   d.gpuAssignments = gpu_table
+   local d = nn.DataParallelTable(1, true, false):add(features, gpu_table):threads(function() require 'cudnn'
+                                       cudnn.benchmark = 1  end)
    d.gradInput = nil
-
    features = d:cuda()
+
+
 
 
 
